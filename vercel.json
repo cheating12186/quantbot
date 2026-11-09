@@ -35,6 +35,14 @@
     {
       "path": "/api/v1/cron/tick",
       "schedule": "0 8 * * 1-5"
+    },
+    {
+      "path": "/api/v1/cron/tick",
+      "schedule": "0 13 * * 1-5"
+    },
+    {
+      "path": "/api/v1/cron/tick",
+      "schedule": "0 16 * * 1-5"
     }
   ]
 }
