@@ -1,0 +1,5 @@
+# Complete local development, Streamlit dashboard, and test dependencies.
+-r requirements.txt
+streamlit>=1.39,<2
+plotly>=5.24,<7
+pytest>=8,<10
