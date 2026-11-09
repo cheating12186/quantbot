@@ -120,6 +120,11 @@ class Repository:
         payload = report.model_dump(mode="json")
         with self.db.session() as session:
             session.add(RunRecord(run_id=report.run_id, ticker=request.ticker, timeframe=request.timeframe, request=request.request, outcome=report.outcome.value, report=payload))
+            # Flush first: agent_traces references research_runs via a foreign
+            # key. SQLAlchemy's unit of work does not guarantee the parent row
+            # is inserted before the child in this configuration, so insert
+            # research_runs explicitly or the FK constraint rejects the traces.
+            session.flush()
             for trace in report.traces:
                 session.add(AgentTraceRecord(run_id=report.run_id, agent=trace.agent, status=trace.status.value, duration_ms=trace.duration_ms, trace=trace.model_dump(mode="json")))
             session.add(JournalRecord(run_id=report.run_id, event_type="FINAL_REPORT", payload={"outcome": report.outcome.value, "reasons": report.reasons}))
