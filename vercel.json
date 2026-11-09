@@ -1,7 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "framework": "fastapi",
-  "cleanUrls": true,
-  "trailingSlash": false
+  "builds": [
+    { "src": "index.py", "use": "@vercel/python", "config": { "pythonVersion": "3.12" } }
+  ],
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.py" }
+  ]
 }
