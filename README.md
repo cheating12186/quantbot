@@ -214,7 +214,9 @@ make check       # tests + byte-code compilation
 
 ## Vercel deployment
 
-The Vercel project and strict OANDA practice environment are configured, but **no public deployment URL exists yet**: the available deployment connector cannot provide Vercel's required first-deployment `projectSettings`/auto-detection confirmation controls. The authenticated CLI or dashboard must complete that first deployment. The current temporary `/tmp` SQLite database is explicitly **ephemeral**, not production-persistent.
+The production deployment is live at **https://quantpilot-gamma.vercel.app/** (Vercel CLI [@](https://vercel.com) + `builds` in `vercel.json`: `@vercel/python` serves the FastAPI app, `@vercel/static` serves `public/`). `quantpilot-trader-737b.vercel.app` is behind Vercel SSO protection; the custom domain serves the web app anonymously. `/` serves the seven-workspace web app, `/health` reports paper mode plus the non-ephemeral Supabase PostgreSQL connection, and `/docs` serves the OpenAPI UI. Pushing to `main` does not auto-deploy (project Git integration creates deployments only through the connected pipeline); deploy explicitly.
+
+**Autopilot (paper-only).** Two mechanisms re-run the complete agent workflow without a human click: (1) the *Autopilot* toggle on the **AI research assistant** page re-runs the full chain every 60 s while the browser tab is open; (2) Vercel Cron calls `GET /api/v1/cron/tick` on weekdays at 08:00 UTC (Hobby plan allows one run per day). `AUTOPILOT_SYMBOL` (default `EUR_USD`), `AUTOPILOT_TIMEFRAME` (default `1h`), `AUTOPILOT_OBJECTIVE`, and `AUTOPILOT_EXECUTE` (default `true`) configure it; set `CRON_SECRET` to require Vercel's `Authorization: Bearer` header. Autopilot can only place simulated paper orders through the deterministic safety gate — stale data, failed controls, or a missing fresh crossover block every order. For true continuous polling (sub-daily), point any external scheduler at `/api/v1/cron/tick`.
 
 See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for the configured environment, exact deployment path, storage warning, and post-deployment OANDA/workflow verification checklist. No credential values are stored in the documentation.
 
@@ -368,7 +370,7 @@ Tests use temporary SQLite databases and deterministic OHLCV fixtures. They neve
 - Limit/stop simulation uses OHLC references and configurable slippage, not tick-level bid/ask queues. Ambiguous protective bars choose the stop first.
 - Backtest annualization defaults to 252 periods; set `periods_per_year` appropriately for other sampling frequencies. No walk-forward optimizer is included.
 - SQLite and direct dashboard service composition target a single-user demo. Production concurrency requires a server database, migrations, authentication, and background workers.
-- **The configured Vercel `DATABASE_URL` currently points to SQLite under `/tmp`. It is ephemeral: paper balances, orders, reports, and journals can disappear between instances or deployments. It is not production-persistent storage.** Supabase/PostgreSQL remains optional and is not yet provisioned.
+- The Vercel deployment's `DATABASE_URL` points to the Supabase PostgreSQL pooler (transaction pooling, port 6543). Prepared statements are disabled for psycopg to stay compatible with transaction pooling. SQLite remains the local/test default only.
 - Yahoo forex can round OHLC bounds independently. QuantPilot repairs only discrepancies at or below 10 bps, emits `PROVIDER_ROUNDING_REPAIR`, and keeps larger inconsistencies fatal. OANDA data is not normalized this way.
 - Yahoo Finance news is configured in Vercel. A live request during validation returned Yahoo's own outage response; the News Analyst correctly returned explicit UNAVAILABLE instead of generated news. OANDA market data is unaffected.
 - LLM token usage is logged when supplied by Groq. The deterministic fallback intentionally does not claim LLM reasoning.

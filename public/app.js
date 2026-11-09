@@ -150,11 +150,32 @@ function prepareAssistant(symbol,timeframe){state.preset={symbol,timeframe};navi
 async function renderAssistant() {
   const preset=state.preset||{symbol:"EUR_USD",timeframe:"1d"};
   content.innerHTML=head("AI research assistant","Submit a forex objective, inspect every agent, and execute only through deterministic controls")+
-  `<div class="card mb"><form id="agent-form" class="form-grid"><div class="field"><label>Instrument</label><input name="ticker" value="${esc(preset.symbol)}" required></div><div class="field"><label>Timeframe</label><select name="timeframe">${["5m","15m","1h","1d"].map(x=>`<option ${x===preset.timeframe?"selected":""}>${x}</option>`).join("")}</select></div><div class="field full"><label>Natural-language objective</label><textarea name="request">Analyze this forex pair for a high-quality EMA crossover setup. Reject the trade if any strategy, data-quality, or risk rule fails.</textarea></div><div class="field full row"><label class="check"><input type="checkbox" name="auto_execute"> Execute in the internal paper broker only if every check passes</label><button class="button primary" type="submit">Launch specialized agents ✦</button></div></form></div><div id="agent-results">${state.report?reportHTML(state.report):`<div class="empty">No research run in this browser session. Historical reports remain available in Agent Monitoring.</div>`}</div>`;
+  `<div class="card mb"><form id="agent-form" class="form-grid"><div class="field"><label>Instrument</label><input name="ticker" value="${esc(preset.symbol)}" required></div><div class="field"><label>Timeframe</label><select name="timeframe">${["5m","15m","1h","1d"].map(x=>`<option ${x===preset.timeframe?"selected":""}>${x}</option>`).join("")}</select></div><div class="field full"><label>Natural-language objective</label><textarea name="request">Analyze this forex pair for a high-quality EMA crossover setup. Reject the trade if any strategy, data-quality, or risk rule fails.</textarea></div><div class="field full row"><label class="check"><input type="checkbox" name="auto_execute"> Execute in the internal paper broker only if every check passes</label><button class="button primary" type="submit">Launch specialized agents ✦</button></div></form></div><div class="card mb"><div class="split"><div><h3 class="section-title">Autopilot · PAPER ONLY</h3><p class="section-subtitle">Re-runs the full agent chain every 60s while this tab is open, using the form values above. Any execution goes only to the simulated broker through the deterministic safety gate; stale data, failed checks, or a missing fresh crossover block every order. Weekday 08:00 UTC ticks also run server-side via Vercel Cron.</p></div><label class="check" style="white-space:nowrap"><input type="checkbox" id="autopilot-toggle"> Enabled</label></div><div class="metric-sub" id="autopilot-status">Off — no background agent cycle is running</div></div><div id="agent-results">${state.report?reportHTML(state.report):`<div class="empty">No research run in this browser session. Historical reports remain available in Agent Monitoring.</div>`}</div>`;
   $("#agent-form").onsubmit=runAgents;
+  $("#autopilot-toggle").onchange=event=>{
+    if(event.target.checked){state.autopilot=state.autopilot||{timer:null,running:false};autopilotTick();state.autopilot.timer=setInterval(autopilotTick,60000);setAutopilotStatus("Autopilot enabled — full agent cycle every 60s");}
+    else{clearInterval(state.autopilot?.timer);if(state.autopilot)state.autopilot.timer=null;setAutopilotStatus("Off — no background agent cycle is running");}
+  };
 }
-async function runAgents(event){
-  event.preventDefault();const form=event.target,f=new FormData(form),button=form.querySelector("button[type=submit]");button.disabled=true;
+function setAutopilotStatus(text, isError=false){const el=$("#autopilot-status");if(el){el.textContent=text;el.style.color=isError?"#fb7185":"";}}
+async function autopilotTick(){
+  state.autopilot=state.autopilot||{timer:null,running:false};
+  if(state.autopilot.running)return;
+  if(!document.contains($("#autopilot-status"))){clearInterval(state.autopilot.timer);state.autopilot.timer=null;return;}
+  const form=$("#agent-form");if(!form)return;
+  const f=new FormData(form);
+  state.autopilot.running=true;
+  setAutopilotStatus(`Running full agent cycle at ${new Date().toLocaleTimeString()}…`);
+  try{
+    const body={ticker:f.get("ticker"),timeframe:f.get("timeframe"),request:f.get("request"),auto_execute:f.get("auto_execute")==="on",rows:300};
+    const report=await api("/api/v1/research",{method:"POST",body:JSON.stringify(body)});
+    state.report=report;
+    if($("#agent-results")&&document.contains($("#agent-results"))){$("#agent-results").innerHTML=reportHTML(report);bindReportTabs();}
+    setAutopilotStatus(`Last cycle ${new Date().toLocaleTimeString()} — ${report.outcome}`);
+  }catch(error){setAutopilotStatus(`Cycle failed closed: ${error.message}`,true);}
+  finally{state.autopilot.running=false;}
+}
+async function runAgents(event){  event.preventDefault();const form=event.target,f=new FormData(form),button=form.querySelector("button[type=submit]");button.disabled=true;
   const steps=["Validating request and connecting to OANDA practice…","Market Analyst and News Analyst working independently…","Auditing strategy, risk, sizing, and supervisor consistency…","Repeating every mandatory control in the safety engine…"];
   $("#agent-results").innerHTML=`<div class="card"><div class="row"><div class="spinner"></div><b>Coordinating QuantPilot agents</b></div><div class="mt">${steps.map((s,i)=>`<div class="step" id="step-${i}"><span class="step-dot"></span>${s}</div>`).join("")}</div></div>`;
   let i=0;const timer=setInterval(()=>{i=Math.min(i+1,steps.length-1);$$('.step').forEach((el,j)=>el.style.opacity=j<=i?"1":".35");},1800);

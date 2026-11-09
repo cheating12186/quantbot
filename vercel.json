@@ -2,13 +2,39 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "builds": [
-    { "src": "index.py", "use": "@vercel/python", "config": { "pythonVersion": "3.12" } },
-    { "src": "public/**", "use": "@vercel/static" }
+    {
+      "src": "index.py",
+      "use": "@vercel/python",
+      "config": {
+        "pythonVersion": "3.12"
+      }
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
+    }
   ],
   "routes": [
-    { "src": "/", "dest": "/public/index.html" },
-    { "src": "/(app\\.js|styles\\.css)", "dest": "/public/$1" },
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.py" }
+    {
+      "src": "/",
+      "dest": "/public/index.html"
+    },
+    {
+      "src": "/(app\\.js|styles\\.css)",
+      "dest": "/public/$1"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.py"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/v1/cron/tick",
+      "schedule": "0 8 * * 1-5"
+    }
   ]
 }

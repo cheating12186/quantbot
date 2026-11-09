@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from agents.orchestrator import QuantPilotOrchestrator
-from api.routes import backtesting, market, portfolio, research
+from api.routes import backtesting, cron, market, portfolio, research
 
 
 def create_app(quantpilot: QuantPilotOrchestrator | None = None) -> FastAPI:
@@ -21,6 +21,7 @@ def create_app(quantpilot: QuantPilotOrchestrator | None = None) -> FastAPI:
     application.include_router(portfolio.router)
     application.include_router(backtesting.router)
     application.include_router(market.router)
+    application.include_router(cron.router)
 
     @application.get("/health", tags=["System"])
     def health():
