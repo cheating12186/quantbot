@@ -19,3 +19,8 @@ dist
 node_modules
 .vercel
 quantpilot-vercel.zip
+
+# Streamlit composition root and dashboard are not part of the Vercel bundle;
+# app.py would otherwise look like a competing FastAPI entrypoint.
+app.py
+dashboard/

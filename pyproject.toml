@@ -3,6 +3,26 @@ name = "quantpilot"
 version = "1.0.0"
 description = "Multi-agent quantitative research and paper-trading platform"
 requires-python = ">=3.11"
+# Dependencies are mirrored from requirements.txt: Vercel detects the
+# FastAPI framework from the dependency manifest, and requirements.txt
+# alone was not picked up when pyproject.toml is present.
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "pydantic>=2.9,<3",
+    "SQLAlchemy>=2.0,<3",
+    "psycopg[binary]>=3.2,<4",
+    "pandas>=2.2,<3",
+    "numpy>=1.26,<3",
+    "yfinance>=0.2.54,<1",
+    "langgraph>=0.2.60,<2",
+    "langchain-core>=0.3,<2",
+    "langchain-groq>=0.2,<2",
+    "groq>=0.11,<2",
+    "PyYAML>=6,<7",
+    "python-dotenv>=1,<2",
+    "httpx>=0.27,<1",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -14,5 +34,6 @@ target-version = "py311"
 [tool.vercel]
 # Explicit FastAPI entrypoint for the Vercel FastAPI preset.
 # api/index.py is not auto-detected in a project with pyproject.toml,
-# and app.py at the root is the Streamlit dashboard (not FastAPI).
+# and app.py at the root is the Streamlit dashboard (not FastAPI), which
+# is excluded from the Vercel bundle via .vercelignore.
 entrypoint = "index:app"
