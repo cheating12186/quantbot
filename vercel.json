@@ -3,12 +3,6 @@
   "version": 2,
   "cleanUrls": true,
   "trailingSlash": false,
-  "functions": {
-    "api/index.py": {
-      "maxDuration": 60,
-      "memory": 1024
-    }
-  },
   "rewrites": [
     { "source": "/api/v1/:path*", "destination": "/api/index.py" },
     { "source": "/health", "destination": "/api/index.py" },
