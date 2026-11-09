@@ -51,6 +51,8 @@ class NewsItem(BaseModel):
     published_at: datetime | None = None
     sentiment: str = "unknown"
     sentiment_score: float = 0.0
+    summary: str = ""
+    symbols: list[str] = Field(default_factory=list)
 
 
 class NewsAnalysisOutput(BaseModel):
@@ -62,6 +64,11 @@ class NewsAnalysisOutput(BaseModel):
     events: list[str] = Field(default_factory=list)
     explanation: str
     source: str = "NONE"
+    # AVAILABLE: articles retrieved · EMPTY: providers responded but had nothing
+    # relevant · UNAVAILABLE: no configured provider could deliver usable data.
+    availability: str = "UNAVAILABLE"
+    retrieved_at: datetime | None = None
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
 
 
 class RuleEvidence(BaseModel):

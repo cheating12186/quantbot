@@ -2,3 +2,5 @@
 @media(max-width:1200px){.grid-5{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-4{grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.content{padding:26px 22px}.topbar{padding:0 22px}}
 @media(max-width:800px){.sidebar{transform:translateX(-100%);transition:.2s}.sidebar.open{transform:translateX(0)}.main{margin-left:0;width:100%}.menu-button{display:block}.topbar{gap:12px;padding:0 16px}.top-actions .environment-badge{display:none}.market-ticker small{display:none}.content{padding:22px 14px}.grid-5,.grid-4,.grid-3,.grid-2{grid-template-columns:1fr 1fr}.span-2{grid-column:span 2}.page-head{flex-direction:column}.form-grid,.form-grid.three{grid-template-columns:1fr 1fr}footer{padding:16px 14px}.quote-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){.grid-5,.grid-4,.grid-3,.grid-2,.form-grid,.form-grid.three,.form-grid.two{grid-template-columns:1fr}.span-2{grid-column:span 1}.metric-value{font-size:23px}.top-actions a{display:none}.page-head h1{font-size:22px}}
+.legend-dot.forming-dot{background:transparent;border:2px dashed var(--amber);border-radius:2px}
+#forming-status{color:#8291aa}

@@ -17,7 +17,7 @@ from database.repository import Repository
 from execution.order_manager import OrderManager
 from execution.paper_broker import PaperBroker
 from execution.safety_engine import DeterministicSafetyEngine
-from models.agent_outputs import ExecutionContext, FinalReport
+from models.agent_outputs import FinalReport
 from models.trade import ResearchRequest
 from orchestration.workflow import TradingWorkflow
 from tools.market_data import MarketDataService, SyntheticMarketDataProvider, YFinanceProvider
@@ -74,7 +74,12 @@ class QuantPilotOrchestrator:
         self.workflow = TradingWorkflow(
             market_data=market_data,
             market_analyst=MarketAnalyst(self.strategy_config),
-            news_analyst=NewsSentimentAnalyst(build_news_provider(self.settings.news_provider)),
+            news_analyst=NewsSentimentAnalyst(build_news_provider(
+                self.settings.news_provider,
+                finnhub_api_key=self.settings.finnhub_api_key,
+                news_api_key=self.settings.news_api_key,
+                cache_ttl_seconds=self.settings.news_cache_ttl_seconds,
+            )),
             rules_auditor=StrategyRulesAuditor(self.strategy_config),
             risk_manager=RiskManager(self.risk_config),
             money_manager=MoneyManager(self.risk_config),

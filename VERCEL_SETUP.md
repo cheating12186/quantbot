@@ -187,14 +187,17 @@ Configure these for **Production**, **Preview**, and **Development** unless you 
 | `DATABASE_URL` | Temporary: `sqlite:////tmp/quantpilot.db` | Treat as Sensitive |
 | `GROQ_MODEL` | `llama-3.3-70b-versatile` | No |
 | `GROQ_API_KEY` | Optional Groq key; leave unset for deterministic mode | **Yes — Sensitive** |
-| `NEWS_PROVIDER` | Configured: `yfinance` | No |
-| `NEWS_API_KEY` | Only if a supported news provider is configured | **Yes — Sensitive** |
+| `NEWS_PROVIDER` | `auto` (Finnhub + yfinance fallback) or `finnhub` / `yfinance` / `none` | No |
+| `FINNHUB_API_KEY` | Finnhub key (https://finnhub.io, free tier 60 calls/min); powers the Finnhub provider and, with `auto`, becomes the primary news source | **Yes — Sensitive** |
+| `NEWS_API_KEY` | Legacy alias for `FINNHUB_API_KEY`; used only when the latter is unset | **Yes — Sensitive** |
+| `NEWS_CACHE_TTL_SECONDS` | Optional; news cache TTL in seconds (default `300`, `0` disables) | No |
 
 Important behavior:
 
 - The application forces `OANDA_ENVIRONMENT=practice` in code even if a different value is supplied.
 - Strict `DATA_PROVIDER=oanda` does not fall back to fabricated/synthetic candles during an outage.
-- `NEWS_PROVIDER=yfinance` uses Yahoo Finance news, including `EUR_USD` → `EURUSD=X` normalization. Provider outages produce explicit UNAVAILABLE news, not invented news. No Yahoo API key is required.
+- `NEWS_PROVIDER=auto` builds an explicit fallback chain: Finnhub (when `FINNHUB_API_KEY` or the `NEWS_API_KEY` alias is set) then keyless `yfinance`. The first provider returning usable articles wins; failures are recorded with sanitized categories (`AUTH_ERROR`, `RATE_LIMITED`, `NETWORK_ERROR`, `UNAVAILABLE`, …) and never expose keys. Finnhub routes US equities to `company-news` and forex pairs to the general `forex` category feed. Provider outages produce explicit UNAVAILABLE news, never invented headlines.
+- News availability is reported as `AVAILABLE` / `EMPTY` / `UNAVAILABLE`; check `GET /api/v1/market/integrations` for the configured chain and the last sanitized health snapshot.
 - Without `GROQ_API_KEY`, agents still run deterministically and the integration endpoint reports Groq as unavailable.
 - After adding or changing an environment variable, **redeploy** so existing serverless instances use it.
 

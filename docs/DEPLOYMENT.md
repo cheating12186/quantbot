@@ -54,6 +54,7 @@ Replace `$APP_URL` with the actual deployment URL, then verify:
 curl -fsS "$APP_URL/health"
 curl -fsS "$APP_URL/api/v1/market/integrations"
 curl -fsS "$APP_URL/api/v1/market/candles/EUR_USD?timeframe=15m&rows=300"
+curl -fsS "$APP_URL/api/v1/market/candles/EUR_USD/forming?timeframe=5m"
 curl -fsS "$APP_URL/api/v1/market/quote/EUR_USD"
 curl -fsS "$APP_URL/api/v1/market/oanda/account"
 ```
@@ -61,14 +62,16 @@ curl -fsS "$APP_URL/api/v1/market/oanda/account"
 Expected checks:
 
 1. `/` loads all seven workspaces without browser JavaScript errors.
-2. Integration status reports `paper_only: true`, OANDA `practice`, `MARKET_DATA_ONLY`, strict provider selection, and `EPHEMERAL_SQLITE` until PostgreSQL is configured.
-3. Candles identify `oanda` as the source, contain completed bars, and include Python-calculated indicators.
-4. Quotes include bid, ask, mid, spread, and a provider timestamp.
-5. Account metadata is read-only and contains no credential.
-6. Research returns only APPROVED, REJECTED, or NO_TRADE; provider/agent errors remain explicit.
-7. Any order fill is recorded only in the internal paper account. No OANDA order endpoint exists in the source.
-8. Groq remains unavailable until a key is configured; no fabricated LLM narrative appears.
-9. Storage is presented as ephemeral until a durable PostgreSQL URL is installed.
+2. Integration status reports `paper_only: true`, OANDA `practice`, `MARKET_DATA_ONLY`, strict provider selection, a `news` block with the configured chain and its cache TTL, and `EPHEMERAL_SQLITE` until PostgreSQL is configured.
+3. Candles identify `oanda` as the source, contain completed bars, and include Python-calculated indicators. The additive `forming_candle` field carries the provider's current incomplete candle (or `null` when the market is closed); it is never part of the completed list.
+4. `/api/v1/market/candles/{symbol}/forming` returns the live incomplete candle (`complete: false`) plus `completed_tail` (the latest provider-confirmed completed bar). Omitting or failing this endpoint must never break the chart or any decision path — incomplete candles cannot reach research, backtests, or paper orders.
+5. Quotes include bid, ask, mid, spread, and a provider timestamp.
+6. Account metadata is read-only and contains no credential.
+7. Research returns only APPROVED, REJECTED, or NO_TRADE; provider/agent errors remain explicit.
+8. Any order fill is recorded only in the internal paper account. No OANDA order endpoint exists in the source.
+9. Groq remains unavailable until a key is configured; no fabricated LLM narrative appears.
+10. News defaults to the configured `NEWS_PROVIDER`; with `auto` and a Finnhub key the chain is `[finnhub, yfinance]`. If Yahoo is down and no Finnhub key is set, news is explicitly `UNAVAILABLE` — never invented.
+11. Storage is presented as ephemeral until a durable PostgreSQL URL is installed.
 
 ## Local production-web validation
 
@@ -81,4 +84,4 @@ For an offline functional demonstration, use `DATA_PROVIDER=synthetic`. Syntheti
 
 ## Environment validation update
 
-Vercel now explicitly configures `NEWS_PROVIDER=yfinance`, `PAPER_ONLY=true`, `TRADING_MODE=paper`, OANDA and LLM timeouts/retries, and the deterministic risk/safety thresholds. `GROQ_API_KEY` is intentionally unset for later manual configuration. The Yahoo forex-news normalization regression tests pass; a live Yahoo news request returned Yahoo's outage response and was explicitly classified unavailable.
+The deployment retains `NEWS_PROVIDER` as configured in Vercel (currently `yfinance`); the application code and documentation now default to `auto` (Finnhub when `FINNHUB_API_KEY`/`NEWS_API_KEY` is set, then keyless `yfinance`) with availability reported as `AVAILABLE`/`EMPTY`/`UNAVAILABLE`. Switching the deployed value to `auto` (or adding `FINNHUB_API_KEY`) requires an environment change and a redeploy — `GET /api/v1/market/integrations` shows the active chain. No news item is ever invented, and no API key appears in any response or log. The live OANDA feed is unaffected by news configuration.

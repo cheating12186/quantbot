@@ -1,6 +1,8 @@
 "use strict";
 
-const state = { page: "overview", market: null, quote: null, report: null, backtest: null, integrations: null, quoteSymbol: "EUR_USD" };
+const state = { page: "overview", market: null, quote: null, report: null, backtest: null, integrations: null, quoteSymbol: "EUR_USD", forming: null, candleTimer: null, formingPoll: { running: false } };
+const CANDLE_POLL_MS = Number(window.QUANTPILOT_CANDLE_POLL_MS) || 8000; // live forming-candle refresh (5–10s)
+const TIMEFRAME_MS = { "5m": 300000, "15m": 900000, "1h": 3600000, "1d": 86400000 };
 const content = document.getElementById("content");
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -55,8 +57,10 @@ function lineChart(labels, series, options = {}) {
   return svg + "</svg>" + `<div class="chart-legend">${series.map(s => `<span><i class="legend-dot" style="background:${s.color}"></i>${esc(s.name)}</span>`).join("")}</div>`;
 }
 
-function candleChart(candles) {
-  const data = (candles || []).slice(-110);
+function candleChart(candles, forming) {
+  const confirmed = (candles || []).slice(-110);
+  const live = forming && Number.isFinite(new Date(forming.timestamp).getTime()) ? { ...forming, complete: false } : null;
+  const data = live ? [...confirmed.slice(-109), live] : confirmed;
   if (!data.length) return `<div class="empty">No candle data</div>`;
   const W=1000,H=430,pad={l:66,r:18,t:18,b:36},priceBottom=300,volTop=330,volBottom=385;
   const values = data.flatMap(d => [d.high,d.low,d.ema_50].filter(Number.isFinite));
@@ -65,10 +69,10 @@ function candleChart(candles) {
   const cw=Math.max(2,(W-pad.l-pad.r)/data.length*.62),maxVol=Math.max(...data.map(d=>d.volume||0),1);
   let svg=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Candlestick chart with EMA indicators">`;
   for(let i=0;i<=5;i++){const yy=pad.t+i/5*(priceBottom-pad.t),v=max-i/5*(max-min);svg+=`<line class="gridline" x1="${pad.l}" y1="${yy}" x2="${W-pad.r}" y2="${yy}"/><text x="${pad.l-8}" y="${yy+3}" text-anchor="end">${price(v)}</text>`;}
-  data.forEach((d,i)=>{const up=d.close>=d.open,color=up?"#34d399":"#fb7185",xx=x(i);svg+=`<line x1="${xx}" y1="${y(d.high)}" x2="${xx}" y2="${y(d.low)}" stroke="${color}" stroke-width="1"/><rect x="${xx-cw/2}" y="${y(Math.max(d.open,d.close))}" width="${cw}" height="${Math.max(1,Math.abs(y(d.open)-y(d.close)))}" fill="${color}"/><rect x="${xx-cw/2}" y="${volBottom-(d.volume||0)/maxVol*(volBottom-volTop)}" width="${cw}" height="${(d.volume||0)/maxVol*(volBottom-volTop)}" fill="#3b82f6" opacity=".45"/>`;});
+  data.forEach((d,i)=>{const forming=d.complete===false,up=d.close>=d.open,color=up?"#34d399":"#fb7185",xx=x(i);svg+=`<line x1="${xx}" y1="${y(d.high)}" x2="${xx}" y2="${y(d.low)}" stroke="${color}" stroke-width="1.4"${forming?' stroke-dasharray="3 2"':""}/><rect x="${xx-cw/2}" y="${y(Math.max(d.open,d.close))}" width="${cw}" height="${Math.max(1,Math.abs(y(d.open)-y(d.close)))}" fill="${color}"${forming?' fill-opacity="0.28" stroke="'+color+'" stroke-width="1.3" stroke-dasharray="4 3"':""}/><rect x="${xx-cw/2}" y="${volBottom-(d.volume||0)/maxVol*(volBottom-volTop)}" width="${cw}" height="${(d.volume||0)/maxVol*(volBottom-volTop)}" fill="#3b82f6" opacity="${forming?"0.25":".45"}"/>`;});
   [{key:"ema_9",color:"#60a5fa"},{key:"ema_15",color:"#c084fc"},{key:"ema_50",color:"#fbbf24"}].forEach(s=>{const points=data.map((d,i)=>Number.isFinite(d[s.key])?`${x(i)},${y(d[s.key])}`:null).filter(Boolean);svg+=`<polyline class="line" points="${points.join(" ")}" stroke="${s.color}" stroke-width="1.3"/>`;});
   for(let i=0;i<=5;i++){const index=Math.min(data.length-1,Math.round(i/5*(data.length-1))),d=new Date(data[index].timestamp);svg+=`<text x="${x(index)}" y="${H-9}" text-anchor="middle">${esc(d.toLocaleDateString([], {month:"short",day:"numeric"}))}</text>`;}
-  return svg+"</svg>"+`<div class="chart-legend"><span><i class="legend-dot" style="background:#60a5fa"></i>EMA 9</span><span><i class="legend-dot" style="background:#c084fc"></i>EMA 15</span><span><i class="legend-dot" style="background:#fbbf24"></i>EMA 50</span><span><i class="legend-dot" style="background:#3b82f6"></i>Volume</span></div>`;
+  return svg+"</svg>"+`<div class="chart-legend"><span><i class="legend-dot" style="background:#60a5fa"></i>EMA 9</span><span><i class="legend-dot" style="background:#c084fc"></i>EMA 15</span><span><i class="legend-dot" style="background:#fbbf24"></i>EMA 50</span><span><i class="legend-dot" style="background:#3b82f6"></i>Volume</span>${live?'<span><i class="legend-dot forming-dot"></i>Forming candle (unconfirmed, chart-only)</span>':''}</div>`;
 }
 
 async function loadIntegrations() {
@@ -130,12 +134,48 @@ function researchForm() { return `<div class="card mb"><form id="market-form" cl
 async function renderResearch() {
   content.innerHTML = head("Market research", "Provider-labelled market quotes, completed OHLCV candles, and Python-calculated indicators") + researchForm() + `<div id="market-results">${state.market?marketResults(state.market):loading("Retrieving completed market candles…")}</div>`;
   $("#market-form").onsubmit = event => { event.preventDefault(); const f=new FormData(event.target); loadMarket(f.get("symbol"),f.get("timeframe"),f.get("rows")); };
-  if (!state.market) loadMarket("EUR_USD","1d",300); else loadQuote(state.market.request.symbol);
+  if (!state.market) loadMarket("EUR_USD","1d",300); else { loadQuote(state.market.request.symbol); startFormingPoll(); }
 }
 async function loadMarket(symbol,timeframe,rows) {
   const target=$("#market-results"); if(target)target.innerHTML=loading("Retrieving completed candles and current quote…");
-  try { const data=await api(`/api/v1/market/candles/${encodeURIComponent(symbol)}?timeframe=${timeframe}&rows=${rows}`);state.market={...data,request:{symbol:symbol.toUpperCase(),timeframe,rows}};state.quoteSymbol=symbol.toUpperCase();if($("#market-results"))$("#market-results").innerHTML=marketResults(state.market);loadQuote(symbol.toUpperCase()); }
-  catch(error){if(target)target.innerHTML=`<div class="alert error">Market retrieval failed: ${esc(error.message)}</div>`;}
+  try {
+    const data=await api(`/api/v1/market/candles/${encodeURIComponent(symbol)}?timeframe=${timeframe}&rows=${rows}`);
+    state.market={...data,request:{symbol:symbol.toUpperCase(),timeframe,rows}};
+    state.forming=data.forming_candle||null;
+    state.quoteSymbol=symbol.toUpperCase();
+    if($("#market-results"))$("#market-results").innerHTML=marketResults(state.market);
+    startFormingPoll();
+    loadQuote(symbol.toUpperCase());
+  } catch(error){ if(target)target.innerHTML=`<div class="alert error">Market retrieval failed: ${esc(error.message)}</div>`; }
+}
+function formingStatusText() {
+  if (state.forming) return `Forming candle · ${dateFmt(state.forming.timestamp)} — unconfirmed, chart-only · refreshing every ${Math.round(CANDLE_POLL_MS / 1000)}s · not used for decisions`;
+  return "No forming candle right now (market closed or provider delay) — showing confirmed completed candles only";
+}
+function setFormingStatus(text, isError=false) { const el=$("#forming-status"); if(el){ el.textContent=text; el.style.color=isError?"#fbbf24":""; } }
+function startFormingPoll() { clearInterval(state.candleTimer); state.candleTimer=setInterval(refreshFormingCandle, CANDLE_POLL_MS); }
+function stopFormingPoll() { clearInterval(state.candleTimer); state.candleTimer=null; }
+async function refreshFormingCandle() {
+  const chartEl=$("#market-chart");
+  if(!chartEl || !state.market?.request) { stopFormingPoll(); return; }
+  if(state.formingPoll.running) return;
+  state.formingPoll.running=true;
+  const { symbol, timeframe, rows } = state.market.request;
+  try {
+    const payload=await api(`/api/v1/market/candles/${encodeURIComponent(symbol)}/forming?timeframe=${encodeURIComponent(timeframe)}`);
+    const intervalMs=TIMEFRAME_MS[timeframe]||3600000;
+    const result=window.QuantPilotCandles.applyCandleUpdate(state.market.candles, state.forming, payload, intervalMs);
+    if(result.gap){ setFormingStatus("Live data moved ahead — reloading confirmed candles…"); loadMarket(symbol,timeframe,rows); return; }
+    state.market.candles=result.candles;
+    state.forming=result.forming;
+    if(result.promoted){ loadMarket(symbol,timeframe,rows); return; } // boundary crossed: refetch to recompute indicators for the promoted bar
+    chartEl.innerHTML=candleChart(state.market.candles, state.forming);
+    setFormingStatus(formingStatusText());
+  } catch(error) {
+    setFormingStatus(`Live update failed (${error.message}) — showing last confirmed candles`, true);
+  } finally {
+    state.formingPoll.running=false;
+  }
 }
 function marketResults(data) {
   const d=data.dataset,c=data.candles,last=c[c.length-1],q=state.quote&&state.quote.instrument===d.metadata.instrument?state.quote:null;
@@ -143,7 +183,7 @@ function marketResults(data) {
   const sourceDetail=`${d.source} · ${d.rows} completed bars · latest ${dateFmt(d.data_timestamp)} · market data is read-only`;
   const disclosures=(d.quality.issues||[]).map(issue=>`<div class="alert ${issue.fatal?"error":""}"><b>${esc(issue.code)}</b> · ${esc(issue.message)}</div>`).join("");
   return provenance(provenanceLabel,sourceDetail,"python")+disclosures+
-  `<div class="grid grid-4">${metric("Instrument",d.metadata.instrument||d.symbol,d.source==="oanda"?"OANDA practice":d.source)}${metric("Last completed close",price(last.close),dateFmt(last.timestamp))}${metric("RSI · ATR",`${num(last.rsi_14,1)} · ${price(last.atr_14)}`,"Python indicators")}${metric("Relative volume",num(last.relative_volume,2),"Current vs prior 20-bar mean")}</div><div class="card mt"><div class="split"><h3 class="section-title">Price, EMA trend & volume</h3>${badge(d.quality.valid?"VALIDATED":"DATA WARNING")}</div>${candleChart(c)}</div><div class="grid grid-2 mt"><div class="card"><h3 class="section-title">${d.source==="oanda"?"Live practice quote":"Provider quote status"}</h3><div id="live-quote">${q?quoteCards(q):loading("Polling current quote…")}</div><div class="metric-sub">Quote timestamp: ${q?dateFmt(q.timestamp):"waiting"}</div></div><div class="card"><h3 class="section-title">Latest numerical evidence</h3>${table([{name:"EMA 9 / 15",value:`${price(last.ema_9)} / ${price(last.ema_15)}`},{name:"EMA 50 / 200",value:`${price(last.ema_50)} / ${price(last.ema_200)}`},{name:"MACD histogram",value:num(last.macd_hist,6)},{name:"Bollinger width",value:last.bb_upper&&last.bb_lower?price(last.bb_upper-last.bb_lower):"—"},{name:"VWAP",value:price(last.vwap)}],[{key:"name",label:"Indicator"},{key:"value",label:"Python value"}])}<button class="button primary mt" onclick="prepareAssistant('${esc(d.symbol)}','${esc(data.request.timeframe)}')">Run multi-agent analysis ✦</button></div></div>`;
+  `<div class="grid grid-4">${metric("Instrument",d.metadata.instrument||d.symbol,d.source==="oanda"?"OANDA practice":d.source)}${metric("Last completed close",price(last.close),dateFmt(last.timestamp))}${metric("RSI · ATR",`${num(last.rsi_14,1)} · ${price(last.atr_14)}`,"Python indicators")}${metric("Relative volume",num(last.relative_volume,2),"Current vs prior 20-bar mean")}</div><div class="card mt"><div class="split"><h3 class="section-title">Price, EMA trend &amp; volume</h3>${badge(d.quality.valid?"VALIDATED":"DATA WARNING")}</div><div id="market-chart">${candleChart(c, state.forming)}</div><div class="metric-sub" id="forming-status">${esc(formingStatusText())}</div></div><div class="grid grid-2 mt"><div class="card"><h3 class="section-title">${d.source==="oanda"?"Live practice quote":"Provider quote status"}</h3><div id="live-quote">${q?quoteCards(q):loading("Polling current quote…")}</div><div class="metric-sub">Quote timestamp: ${q?dateFmt(q.timestamp):"waiting"}</div></div><div class="card"><h3 class="section-title">Latest numerical evidence</h3>${table([{name:"EMA 9 / 15",value:`${price(last.ema_9)} / ${price(last.ema_15)}`},{name:"EMA 50 / 200",value:`${price(last.ema_50)} / ${price(last.ema_200)}`},{name:"MACD histogram",value:num(last.macd_hist,6)},{name:"Bollinger width",value:last.bb_upper&&last.bb_lower?price(last.bb_upper-last.bb_lower):"—"},{name:"VWAP",value:price(last.vwap)}],[{key:"name",label:"Indicator"},{key:"value",label:"Python value"}])}<button class="button primary mt" onclick="prepareAssistant('${esc(d.symbol)}','${esc(data.request.timeframe)}')">Run multi-agent analysis ✦</button></div></div>`;
 }
 function prepareAssistant(symbol,timeframe){state.preset={symbol,timeframe};navigate("assistant");}
 

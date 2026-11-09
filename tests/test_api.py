@@ -45,3 +45,38 @@ def test_backtest_endpoint_returns_computed_history(tmp_path):
 def test_unknown_run_returns_404(tmp_path):
     api = client(tmp_path)
     assert api.get("/api/v1/research/runs/not-a-run").status_code == 404
+
+
+def test_candles_endpoint_exposes_forming_fields_backward_compatibly(tmp_path):
+    api = client(tmp_path)
+    response = api.get("/api/v1/market/candles/DEMO?timeframe=1d&rows=60")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "candles" in payload and "dataset" in payload  # original contract preserved
+    assert "forming_candle" in payload and "completed_tail" in payload
+    if payload["forming_candle"] is not None:
+        assert payload["forming_candle"]["complete"] is False
+        stamps = {c["timestamp"] for c in payload["candles"]}
+        assert payload["forming_candle"]["timestamp"] not in stamps
+
+
+def test_forming_endpoint_reports_provider_without_intrabar_data(tmp_path):
+    api = client(tmp_path)
+    response = api.get("/api/v1/market/candles/DEMO/forming?timeframe=1d")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["forming"] is None  # synthetic provider reports no intrabar candle
+    assert "completed_tail" in payload
+    assert payload.get("error") is None
+
+
+def test_integrations_reports_news_configuration(tmp_path):
+    api = client(tmp_path)
+    response = api.get("/api/v1/market/integrations")
+    assert response.status_code == 200
+    news = response.json()["news"]
+    assert news["provider_selected"] == "none"
+    assert news["fallback_chain"] == []
+    assert news["finnhub_configured"] is False
+    assert news["cache_ttl_seconds"] == 300
+    assert "last_health" in news

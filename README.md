@@ -24,9 +24,10 @@ The dependency-free web application is served by FastAPI and uses relative API U
 - **SQLite paper broker** with market/limit orders, idempotent client IDs, cancellation, stops/targets, partial closes, fees, slippage, long/short accounting, fills, and journals.
 - **Event-driven backtesting** with next-bar execution, stop-first ambiguous bars, transaction costs, equity/drawdown curves, trade history, and buy-and-hold comparison.
 - **Read-only OANDA v20 practice integration** for completed forex candles, real-time bid/ask/mid quotes, spread, and account metadata. Live OANDA environments and order endpoints are intentionally unavailable.
+- **Live forming-candle chart updates**: the chart polls the actual OANDA incomplete candle every 8 s and refreshes the active bar in place; confirmed bars stay stable, and incomplete candles can never reach research, backtesting, or paper orders.
 - **FastAPI + interactive OpenAPI docs**, a dependency-free seven-workspace production web app, and a seven-section Streamlit dashboard.
 - **Vercel serverless entrypoint and routing**, strict provider configuration, current configurable Groq production models, and explicit ephemeral-storage reporting when PostgreSQL is absent.
-- **55 offline tests** using deterministic data and mocked OANDA responses; no test needs Groq or a live market API.
+- **82 offline tests** plus 7 Node chart-logic tests, using deterministic data and mocked OANDA/news responses; no test needs Groq or a live market API.
 
 ## Architecture
 
@@ -156,8 +157,10 @@ GROQ_MODEL=llama-3.3-70b-versatile
 DATABASE_URL=sqlite:///./quantpilot.db
 DATA_PROVIDER=auto
 ALLOW_SYNTHETIC_FALLBACK=true
-NEWS_PROVIDER=none
+NEWS_PROVIDER=auto
+FINNHUB_API_KEY=
 NEWS_API_KEY=
+NEWS_CACHE_TTL_SECONDS=300
 OANDA_API_KEY=
 OANDA_ACCOUNT_ID=
 OANDA_ENVIRONMENT=practice
@@ -172,11 +175,38 @@ OANDA_ENVIRONMENT=practice
 | `ALLOW_SYNTHETIC_FALLBACK` | In `auto`, controls whether provider failure can use reproducible synthetic OHLCV |
 | `OANDA_API_KEY` / `OANDA_ACCOUNT_ID` | Practice-account credentials for candles, quotes, and read-only account metadata; never place them in source |
 | `OANDA_ENVIRONMENT` | The settings layer forces `practice`; `live` is rejected by the provider |
-| `NEWS_PROVIDER` | `none` or `yfinance`; no provider returns explicit UNAVAILABLE |
+| `NEWS_PROVIDER` | `auto` (default recommendation), `finnhub`, `yfinance`, or `none` — see below |
+| `FINNHUB_API_KEY` | Preferred news key (https://finnhub.io, free tier: 60 calls/min). US equities via `company-news`; forex via the general `forex` category feed |
+| `NEWS_API_KEY` | Legacy alias for `FINNHUB_API_KEY`, used only when the latter is unset. If the key belongs to another service, leave it empty and set `FINNHUB_API_KEY` |
+| `NEWS_CACHE_TTL_SECONDS` | Optional; provider-response cache TTL in seconds. Default `300`; `0` disables. Cached entries keep their original publication and retrieval timestamps |
 | `LLM_TIMEOUT_SECONDS` | Optional; default 20 seconds |
 | `LLM_MAX_RETRIES` | Optional; default 2 bounded retries |
 
 `PAPER_ONLY=true` is displayed in `.env.example`, but the code treats paper-only as immutable rather than allowing an environment variable to enable real trading.
+
+### News providers and availability states
+
+The News Analyst never fabricates headlines. Every item in a report was retrieved from a
+configured provider (deduplicated by canonical URL, else normalized headline, with publisher,
+URL, publication time, and provider summary preserved where the provider supplies them).
+
+- `NEWS_PROVIDER=auto` (recommended): an explicit fallback chain — Finnhub when
+  `FINNHUB_API_KEY` (or the `NEWS_API_KEY` alias) is configured, then keyless `yfinance`.
+  The first provider returning usable articles wins; providers that fail are recorded with a
+  sanitized category (`AUTH_ERROR`, `RATE_LIMITED`, `NETWORK_ERROR`, `UPSTREAM_ERROR`,
+  `NOT_CONFIGURED`, …). Auth failures are not retried; rate limits and 5xx get two bounded
+  retries; all requests carry a 15s timeout.
+- `NEWS_PROVIDER=finnhub`: Finnhub only; unconfigured key yields explicit UNAVAILABLE.
+- `NEWS_PROVIDER=yfinance`: Yahoo Finance only (no key, best effort, no retries beyond Yahoo's own).
+- `NEWS_PROVIDER=none`: explicit UNAVAILABLE — no news claims are generated.
+
+Every response distinguishes three states via `availability`: **AVAILABLE** (articles retrieved),
+**EMPTY** (a provider responded successfully but had nothing relevant), and **UNAVAILABLE** (no
+configured provider could deliver usable data). `diagnostics` on the news output carries the
+winning provider, cache status, retrieval timestamp, and the per-provider attempt log — never
+credentials or raw provider payloads. Cached articles keep their original `published_at` and the
+`retrieved_at` of the underlying fetch, so stale news is never presented as fresh. Check
+`GET /api/v1/market/integrations` for the active chain and the last sanitized health snapshot.
 
 ## Run the application
 
@@ -318,6 +348,29 @@ Pydantic response models and generated OpenAPI schemas are available in Swagger.
 
 Defaults include 1% maximum trade risk, 2% daily loss, 5% account drawdown, three concurrent positions, 1.5 minimum risk/reward, 3% portfolio risk, 25% position notional, and 100% gross exposure. Fees, slippage, lot size, volatility, and freshness limits are also configured here.
 
+### Completed vs forming candles
+
+Two clearly distinguished data concepts flow from OANDA:
+
+1. **Completed candles** — final OHLCV as reported by the OANDA candles endpoint (`complete: true`).
+   These are the only bars allowed in indicators, research, the AI workflow, backtesting, and paper
+   decisions. `MarketDataService.fetch()` / `provider.history()` filter to completed bars.
+2. **Forming candle** — the current incomplete candle OANDA returns with `complete: false`. It is
+   exposed solely for live chart display via `GET /api/v1/market/candles/{symbol}/forming` (and the
+   additive `forming_candle` field on the existing candles response) and is rendered with a dashed,
+   translucent body, a “Forming (unconfirmed, chart-only)” legend entry, and an in-place refresh
+   every ~8 s (configurable via `window.QUANTPILOT_CANDLE_POLL_MS`).
+
+Freezing rules: the forming candle is never appended to the completed series; it is updated in
+place. When OANDA confirms a boundary (`completed_tail` in the forming response is newer than the
+last completed bar), the chart reloads so indicators are recomputed for the newly confirmed bar.
+Weekends and market gaps are normal — the forming response then carries `forming: null` and the
+chart shows confirmed bars only. The backend never approximates OHLC from quote snapshots.
+
+Timestamps are UTC throughout (OANDA RFC3339, seconds precision); the frontend displays them in the
+browser’s timezone. Vercel serverless functions cannot hold streaming sockets, so live display is
+implemented as short idempotent GETs — no server-side streaming process is required.
+
 ### `config/strategy_config.yaml`
 
 Controls EMA periods, RSI thresholds, relative volume, confidence threshold, ATR stops/targets, timeframe mapping, long/short permissions, UTC sessions, and whether a fresh crossover is mandatory.
@@ -328,10 +381,11 @@ The Money Manager reads risk policy but cannot change it. The orchestrator and s
 
 ```bash
 pytest -q
+node --test tests/js/candle-utils.test.cjs
 python -m compileall -q . -x 'quantpilot.db|docs'
 ```
 
-Current result: **55 passed**, plus clean Python compilation, frontend JavaScript syntax validation, and Chromium checks of all seven web workspaces. A live Yahoo forex regression also passed with a visible bounded-rounding repair disclosure. Live OANDA verification still requires a successful deployment because credentials exist only in Vercel environment settings.
+Current result: **82 passed** (pytest) plus 7 passed (Node built-in test runner for the chart merge logic), with clean Python compilation and frontend syntax checks. Live OANDA and Finnhub verification requires configured credentials; mocked provider tests cover the integration paths deterministically.
 
 Coverage includes:
 
@@ -345,6 +399,8 @@ Coverage includes:
 - Persistent loss/drawdown halts.
 - Backtest trade generation, fees, chronological splitting, and next-bar/no-look-ahead behavior.
 - Full APPROVED paper execution, NO_TRADE, provider failure, run persistence, and HTTP API contracts.
+- News: primary/fallback success, EMPTY vs UNAVAILABLE, missing keys, deduplication, invalid items, timeouts, retries, rate limits, cache TTL and retrieval-timestamp preservation, and no fabricated headlines.
+- OANDA: forming vs completed candle separation, RFC3339 normalization, market-closure gaps, malformed-candle skipping, in-place forming updates, boundary promotion exactly-once semantics, and gap detection (Node tests for the chart merge logic).
 
 Tests use temporary SQLite databases and deterministic OHLCV fixtures. They never require live APIs, external credentials, or Groq availability.
 

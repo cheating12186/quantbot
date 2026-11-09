@@ -56,6 +56,8 @@ class Settings(BaseModel):
     allow_synthetic_fallback: bool = True
     news_provider: str = "none"
     news_api_key: str = ""
+    finnhub_api_key: str = ""
+    news_cache_ttl_seconds: int = 300
     oanda_api_key: str = ""
     oanda_account_id: str = ""
     oanda_environment: str = "practice"
@@ -71,6 +73,14 @@ def _yaml(path: Path) -> dict[str, Any]:
         return yaml.safe_load(handle) or {}
 
 
+def _safe_int(raw: str | None, default: int) -> int:
+    try:
+        value = int(str(raw).strip()) if raw is not None else default
+    except (TypeError, ValueError):
+        return default
+    return max(0, value)
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings(
@@ -81,6 +91,8 @@ def get_settings() -> Settings:
         allow_synthetic_fallback=os.getenv("ALLOW_SYNTHETIC_FALLBACK", "true").lower() == "true",
         news_provider=os.getenv("NEWS_PROVIDER", "none").lower(),
         news_api_key=os.getenv("NEWS_API_KEY", ""),
+        finnhub_api_key=os.getenv("FINNHUB_API_KEY", ""),
+        news_cache_ttl_seconds=_safe_int(os.getenv("NEWS_CACHE_TTL_SECONDS"), 300),
         oanda_api_key=os.getenv("OANDA_API_KEY", ""),
         oanda_account_id=os.getenv("OANDA_ACCOUNT_ID", ""),
         oanda_environment="practice",  # Real-money OANDA endpoints are intentionally unavailable.

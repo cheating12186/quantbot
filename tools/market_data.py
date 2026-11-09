@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
@@ -133,6 +133,16 @@ class MarketDataProvider(ABC):
     @abstractmethod
     def history(self, symbol: str, timeframe: str, rows: int = 300) -> pd.DataFrame:
         raise NotImplementedError
+
+    def forming_candle(self, symbol: str, timeframe: str) -> dict[str, Any] | None:
+        """Return the provider's current incomplete candle for live charts only.
+
+        Confirmed decisions (indicators, research, backtesting, paper orders)
+        must use ``history()`` — completed candles only. Subclasses that can
+        report a forming candle override this; the default is ``None`` ("not
+        available"), which never fabricates intrabar data.
+        """
+        return None
 
 
 class YFinanceProvider(MarketDataProvider):
@@ -267,3 +277,37 @@ class MarketDataService:
             is_synthetic=provider.is_synthetic,
             metadata=provider_metadata,
         )
+
+    def forming_candle(self, symbol: str, timeframe: str) -> dict[str, Any]:
+        """Chart-only forming (incomplete) candle for the *primary* provider.
+
+        Never raises and never substitutes synthetic data: providers without a
+        forming-candle concept return ``forming: None`` with an explicit
+        ``reason``. The result carries ``complete: False`` so callers cannot
+        mistake it for confirmed OHLCV.
+        """
+        symbol = symbol.strip().upper().replace("/", "_")
+        if timeframe not in SUPPORTED_TIMEFRAMES:
+            return {"symbol": symbol, "timeframe": timeframe, "forming": None,
+                    "completed_tail": None, "error": f"Unsupported timeframe: {timeframe}",
+                    "retrieved_at": self.clock().isoformat()}
+        provider_forming = getattr(self.provider, "forming_candle", None)
+        if not callable(provider_forming):
+            return {"symbol": symbol, "timeframe": timeframe, "forming": None,
+                    "completed_tail": None, "reason": "Provider does not report a forming candle",
+                    "retrieved_at": self.clock().isoformat()}
+        try:
+            payload = provider_forming(symbol, timeframe)
+        except MarketDataError as exc:
+            return {"symbol": symbol, "timeframe": timeframe, "forming": None,
+                    "completed_tail": None, "error": str(exc)[:200],
+                    "retrieved_at": self.clock().isoformat()}
+        except Exception as exc:  # defensive: chart path must degrade, not crash
+            return {"symbol": symbol, "timeframe": timeframe, "forming": None,
+                    "completed_tail": None, "error": f"Forming candle unavailable: {type(exc).__name__}",
+                    "retrieved_at": self.clock().isoformat()}
+        if payload is None:
+            return {"symbol": symbol, "timeframe": timeframe, "forming": None,
+                    "completed_tail": None, "reason": "Provider does not report a forming candle",
+                    "retrieved_at": self.clock().isoformat()}
+        return payload
