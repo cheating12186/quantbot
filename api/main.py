@@ -37,21 +37,6 @@ def create_app(quantpilot: QuantPilotOrchestrator | None = None) -> FastAPI:
     if public_dir is not None:
         application.mount("/", StaticFiles(directory=public_dir, html=True), name="quantpilot-web")
 
-    @application.get("/debug/fs", include_in_schema=False)
-    def debug_fs():
-        import os
-
-        module_file = Path(__file__).resolve()
-        return {
-            "__file__": __file__,
-            "resolved": str(module_file),
-            "cwd": os.getcwd(),
-            "candidates": [
-                {"path": str(c), "exists": c.exists(), "entries": sorted(os.listdir(c)) if c.exists() else None}
-                for c in _public_dir_candidates()
-            ],
-        }
-
     return application
 
 
@@ -59,7 +44,6 @@ def _public_dir_candidates():
     module_file = Path(__file__).resolve()
     return [
         module_file.parents[1] / "public",
-        Path(__file__).resolve().parents[2] / "public" if len(module_file.parents) > 2 else module_file.parents[1] / "public",
         Path.cwd() / "public",
         Path("/var/task/public"),
         Path("/vercel/path0/public"),
