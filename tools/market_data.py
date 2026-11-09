@@ -291,10 +291,11 @@ class MarketDataService:
             return {"symbol": symbol, "timeframe": timeframe, "forming": None,
                     "completed_tail": None, "error": f"Unsupported timeframe: {timeframe}",
                     "retrieved_at": self.clock().isoformat()}
+        provider_name = getattr(self.provider, "name", "unknown")
         provider_forming = getattr(self.provider, "forming_candle", None)
         if not callable(provider_forming):
             return {"symbol": symbol, "timeframe": timeframe, "forming": None,
-                    "completed_tail": None, "reason": "Provider does not report a forming candle",
+                    "completed_tail": None, "reason": f"Provider '{provider_name}' does not report a forming candle",
                     "retrieved_at": self.clock().isoformat()}
         try:
             payload = provider_forming(symbol, timeframe)
@@ -308,6 +309,6 @@ class MarketDataService:
                     "retrieved_at": self.clock().isoformat()}
         if payload is None:
             return {"symbol": symbol, "timeframe": timeframe, "forming": None,
-                    "completed_tail": None, "reason": "Provider does not report a forming candle",
+                    "completed_tail": None, "reason": f"Provider '{provider_name}' does not report a forming candle",
                     "retrieved_at": self.clock().isoformat()}
         return payload
