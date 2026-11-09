@@ -10,3 +10,9 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 110
 target-version = "py311"
+
+[tool.vercel]
+# Explicit FastAPI entrypoint for the Vercel FastAPI preset.
+# api/index.py is not auto-detected in a project with pyproject.toml,
+# and app.py at the root is the Streamlit dashboard (not FastAPI).
+entrypoint = "index:app"
