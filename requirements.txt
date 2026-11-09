@@ -1,0 +1,17 @@
+# Production web/API dependencies used by Vercel.
+# Install requirements-dev.txt instead for Streamlit, Plotly, and tests.
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+pydantic>=2.9,<3
+SQLAlchemy>=2.0,<3
+psycopg[binary]>=3.2,<4
+pandas>=2.2,<3
+numpy>=1.26,<3
+yfinance>=0.2.54,<1
+langgraph>=0.2.60,<2
+langchain-core>=0.3,<2
+langchain-groq>=0.2,<2
+groq>=0.11,<2
+PyYAML>=6,<7
+python-dotenv>=1,<2
+httpx>=0.27,<1

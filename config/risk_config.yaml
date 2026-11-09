@@ -1,0 +1,19 @@
+# Paper-simulation defaults, not universal trading recommendations.
+max_risk_per_trade_pct: 0.01
+max_daily_loss_pct: 0.02
+max_account_drawdown_pct: 0.05
+max_concurrent_positions: 3
+min_risk_reward: 1.5
+max_portfolio_risk_pct: 0.03
+max_position_notional_pct: 0.25
+max_gross_exposure_pct: 1.0
+max_atr_pct: 0.12
+fee_bps: 1.0
+slippage_bps: 2.0
+lot_size: 1.0
+default_equity: 100000.0
+max_data_age_minutes:
+  5m: 30
+  15m: 90
+  1h: 240
+  1d: 4320

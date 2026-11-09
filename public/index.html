@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="QuantPilot multi-agent forex research and deterministic paper trading">
+  <title>QuantPilot · Agentic Forex Intelligence</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2214%22 fill=%22%230b1424%22/><path d=%22M32 10L52 32 32 54 12 32Z%22 fill=%22none%22 stroke=%22%2360a5fa%22 stroke-width=%223%22/><path d=%22M32 22L42 32 32 42 22 32Z%22 fill=%22%2360a5fa%22/></svg>">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><div class="brand-mark">◈</div><div><strong>QuantPilot</strong><span>AGENTIC MARKET INTELLIGENCE</span></div></div>
+      <nav id="nav">
+        <button class="nav-item active" data-page="overview"><span>⌁</span>Overview</button>
+        <button class="nav-item" data-page="research"><span>◫</span>Market Research</button>
+        <button class="nav-item" data-page="assistant"><span>✦</span>AI Research Assistant</button>
+        <button class="nav-item" data-page="trading"><span>⇄</span>Paper Trading</button>
+        <button class="nav-item" data-page="risk"><span>⛉</span>Risk Management</button>
+        <button class="nav-item" data-page="backtesting"><span>↗</span>Backtesting</button>
+        <button class="nav-item" data-page="monitoring"><span>◎</span>Agent Monitoring</button>
+      </nav>
+      <div class="system-panel">
+        <div class="eyebrow">SYSTEM MODE</div>
+        <div class="paper-pill">⛉ PAPER TRADING ONLY</div>
+        <div class="integration-row"><span>OANDA</span><b id="oanda-status">CHECKING</b></div>
+        <div class="integration-row"><span>Groq</span><b id="groq-status">DETERMINISTIC</b></div>
+        <div class="integration-row"><span>Storage</span><b id="db-status">CHECKING</b></div>
+        <p>Read-only practice data. No real brokerage orders.</p>
+      </div>
+      <div class="sidebar-foot">v1.1.0 · OANDA PRACTICE</div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <button class="menu-button" id="menu-button" aria-label="Toggle navigation">☰</button>
+        <div class="market-ticker"><span class="live-dot"></span><span id="top-symbol">EUR/USD</span><strong id="top-quote">—</strong><small id="top-quote-time">practice quote</small></div>
+        <div class="top-actions"><span class="environment-badge">PRACTICE DATA</span><a href="/docs" target="_blank" rel="noreferrer">API Docs ↗</a></div>
+      </header>
+      <div id="content" class="content"><div class="loading-screen"><div class="spinner"></div><p>Initializing QuantPilot…</p></div></div>
+      <footer>QuantPilot · Research and simulated execution only · Historical performance does not guarantee future returns · Not financial advice</footer>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="alert"></div>
+  <script src="/app.js"></script>
+</body>
+</html>
